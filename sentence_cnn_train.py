@@ -5,7 +5,8 @@ import tensorflow as tf
 import numpy as np
 import cPickle
 import random
-import cnn_utils
+import util.cnn_utils
+import argparse
 
 def pad_sentence(sentences, w2v_size, max_length):
     np.random.seed(0)
@@ -33,7 +34,7 @@ def build_and_suffle_data(pos_fmatrix, neg_fmatrix, pos_label, neg_label, pos_se
     np.random.seed(0)
     data = np.array([pos_fmatrix + neg_fmatrix, pos_label + neg_label, pos_sen + neg_sen])
     suffled_indices = np.random.permutation(np.arange(len(data[0])))
-    #suffile data
+    ###suffile data
     fmatrix = data[0][suffled_indices].tolist()
     original_label = data[1][suffled_indices].tolist()
     sen = data[2][suffled_indices].tolist()
@@ -78,40 +79,46 @@ def get_batch_balanced(pos_fmatrix, neg_fmatrix, pos_label, neg_label, batch_siz
     return sentence_batch, label_batch
 
 if __name__=="__main__":
-    pos_file = sys.argv[1]
-    neg_file = sys.argv[2]
-    model_name = sys.argv[3]
+    parser = argparse.ArgumentParser(description='Generate feature vector for sentences')
+    parser.add_argument('-pf', '--pos_file', help='positive feature vectors for training', required=True)
+    parser.add_argument('-nf', '--neg_file', help='negitive feature vectors for training', required=True)
+    parser.add_argument('-w2v_size', help='word2vector size (default: 300)', default=300)
+    parser.add_argument('--label_size', help='how many classes? (default: 2)', default=2)
+    parser.add_argument('-b', '--traning_batch_size', help='size of each batch when training (default: 50)', default=50)
+    parser.add_argument('-m', '--model', help='the trained model', required=True)
+    parser.add_argument('-test_size', help='test data size for each class', default=100)
+    parser.add_argument('-iterations', help='number of training iterations', default=1000)
+    args = parser.parse_args()
 
-    w2v_size = 300
-    label_size = 2
-    training_batch_size = 50
+    model_name = args.model
+    w2v_size = args.w2v_size
+    label_size = args.label_size
+    training_batch_size = args.training_batch_size
+    iterations = args.iterations
 
-    #load sentence with w2v word embeddings
-    pos_sen, pos_fmatrix, pos_label = cPickle.load(open(pos_file, 'r'))
-    neg_sen, neg_fmatrix, neg_label = cPickle.load(open(neg_file, 'r'))
+    ###load sentence with w2v word embeddings
+    pos_sen, pos_fmatrix, pos_label = cPickle.load(open(args.pos_file, 'r'))
+    neg_sen, neg_fmatrix, neg_label = cPickle.load(open(args.neg_file, 'r'))
 
-    #build and shuffle data
+    ###build and shuffle data
     max_length = max(len(s) for s in (pos_fmatrix + neg_fmatrix))
     print 'max length = ', max_length
-    #sentences, labels, raw_sentences = build_data(pos_fmatrix, neg_fmatrix, pos_label, neg_label, pos_sen, neg_sen)
     sentences, labels, raw_sentences = build_and_suffle_data(pos_fmatrix, neg_fmatrix, pos_label, neg_label, pos_sen, neg_sen)
-    #pad sentences to the same length
+
+    ###pad sentences to the same length
     pad_sentence(sentences, w2v_size, max_length)
 
-    #remember to do cross valadition next time... don't say lazy
-    test_size = 2000
+    ###remember to do cross valadition next time... don't say lazy
+    test_size = 100
     sentences_train, sentences_test = sentences[:-test_size], sentences[-test_size:]
     labels_train, labels_test = labels[:-test_size], labels[-test_size:]
     raw_sen_train, raw_sen_test = raw_sentences[:-test_size], raw_sentences[-test_size:]
-    #sentences_train = sentences
-    #labels_train = labels
-    #raw_sen_train = raw_sentences
 
-    #training
+    ###training data placeholder
     x = tf.placeholder("float", shape=[None, max_length, w2v_size])
     y_ = tf.placeholder("float", shape=[None, label_size])
 
-    #Convolution and Pooling
+    ###Convolution and Pooling
     feature_size1 = 100
     filter_list = [3, 4, 5]
 
@@ -125,19 +132,18 @@ if __name__=="__main__":
         h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
         h_pool1 = max_pool_Nx1(h_conv1, max_length - filter_size + 1)
 
-    #dropout
+    ###dropout
     keep_prob = tf.placeholder("float")
     h_pool1_drop = tf.nn.dropout(h_pool1, keep_prob)
 
-
-    #Readout Layer
+    ###readout Layer
     W_fc2 = weight_variable([feature_size1, label_size])
     b_fc2 = bias_variable([label_size])
 
     h_pool1_flat = tf.reshape(h_pool1_drop, [-1, 1 * 1 * feature_size1])
     y_conv = tf.nn.softmax(tf.matmul(h_pool1_flat, W_fc2) + b_fc2)
 
-    #train
+    ###train
     cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
     with tf.name_scope("train") as scope:
         train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
@@ -158,7 +164,7 @@ if __name__=="__main__":
     writer = tf.train.SummaryWriter("./training_logs", sess.graph_def)
     ###
 
-    for i in range(3000):
+    for i in range(iterations):
         batch_x, batch_y = get_batch_rand(sentences_train, labels_train, training_batch_size)
         if i % 10 == 0:
             ## mini batch accuracy
@@ -184,3 +190,4 @@ if __name__=="__main__":
     print "test accuracy %g" % test_accuracy_score
 
     pred, ans = cnn_utils.evaluate_pr(tf, x, y_, sentences_test, labels_test, y_conv, keep_prob)
+
