@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import sys
 from gensim.models import word2vec
-import tensorflow as tf
 import numpy as np
 import cPickle
 import argparse

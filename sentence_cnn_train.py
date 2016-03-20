@@ -1,6 +1,5 @@
 #!/usr/bin/python
 import sys
-from gensim.models import word2vec
 import tensorflow as tf
 import numpy as np
 import cPickle
@@ -84,17 +83,18 @@ if __name__=="__main__":
     parser.add_argument('-nf', '--neg_file', help='negitive feature vectors for training', required=True)
     parser.add_argument('-w2v_size', help='word2vector size (default: 300)', default=300)
     parser.add_argument('--label_size', help='how many classes? (default: 2)', default=2)
-    parser.add_argument('-b', '--traning_batch_size', help='size of each batch when training (default: 50)', default=50)
-    parser.add_argument('-m', '--model', help='the trained model', required=True)
+    parser.add_argument('-b', '--training_batch_size', help='size of each batch when training (default: 50)', default=50)
+    parser.add_argument('-m', '--model_output', help='the trained model', required=True)
     parser.add_argument('-test_size', help='test data size for each class', default=100)
     parser.add_argument('-iterations', help='number of training iterations', default=1000)
     args = parser.parse_args()
 
-    model_name = args.model
+    model_name = args.model_output
     w2v_size = args.w2v_size
     label_size = args.label_size
     training_batch_size = args.training_batch_size
     iterations = args.iterations
+    test_size = args.test_size
 
     ###load sentence with w2v word embeddings
     pos_sen, pos_fmatrix, pos_label = cPickle.load(open(args.pos_file, 'r'))
@@ -109,7 +109,6 @@ if __name__=="__main__":
     pad_sentence(sentences, w2v_size, max_length)
 
     ###remember to do cross valadition next time... don't say lazy
-    test_size = 100
     sentences_train, sentences_test = sentences[:-test_size], sentences[-test_size:]
     labels_train, labels_test = labels[:-test_size], labels[-test_size:]
     raw_sen_train, raw_sen_test = raw_sentences[:-test_size], raw_sentences[-test_size:]
@@ -120,7 +119,7 @@ if __name__=="__main__":
 
     ###Convolution and Pooling
     feature_size1 = 100
-    filter_list = [3, 4, 5]
+    filter_list = [4]
 
     poolings = []
 
@@ -131,16 +130,22 @@ if __name__=="__main__":
 
         h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
         h_pool1 = max_pool_Nx1(h_conv1, max_length - filter_size + 1)
+        poolings.append(h_pool1)
+
+    ###combine pooled features
+    filters_total_size = feature_size1 * len(filter_list)
+    h_pool = tf.concat(3, poolings)
+    h_pool_all = tf.reshape(h_pool, [-1, filters_total_size])
 
     ###dropout
     keep_prob = tf.placeholder("float")
-    h_pool1_drop = tf.nn.dropout(h_pool1, keep_prob)
+    h_pool1_drop = tf.nn.dropout(h_pool_all, keep_prob)
 
     ###readout Layer
-    W_fc2 = weight_variable([feature_size1, label_size])
+    W_fc2 = weight_variable([filters_total_size, label_size])
     b_fc2 = bias_variable([label_size])
 
-    h_pool1_flat = tf.reshape(h_pool1_drop, [-1, 1 * 1 * feature_size1])
+    h_pool1_flat = tf.reshape(h_pool1_drop, [-1, 1 * 1 * filters_total_size])
     y_conv = tf.nn.softmax(tf.matmul(h_pool1_flat, W_fc2) + b_fc2)
 
     ###train
