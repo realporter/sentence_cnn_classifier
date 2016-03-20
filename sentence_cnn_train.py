@@ -81,12 +81,13 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Generate feature vector for sentences')
     parser.add_argument('-pf', '--pos_file', help='positive feature vectors for training', required=True)
     parser.add_argument('-nf', '--neg_file', help='negitive feature vectors for training', required=True)
-    parser.add_argument('-w2v_size', help='word2vector size (default: 300)', default=300)
-    parser.add_argument('--label_size', help='how many classes? (default: 2)', default=2)
-    parser.add_argument('-b', '--training_batch_size', help='size of each batch when training (default: 50)', default=50)
+    parser.add_argument('-w2v_size', type=int, help='word2vector size (default: 300)', default=300)
+    parser.add_argument('--label_size', type=int, help='how many classes? (default: 2)', default=2)
+    parser.add_argument('-b', '--training_batch_size', type=int, help='size of each batch when training (default: 50)', default=50)
     parser.add_argument('-m', '--model_output', help='the trained model', required=True)
-    parser.add_argument('-test_size', help='test data size for each class', default=100)
-    parser.add_argument('-iterations', help='number of training iterations', default=1000)
+    parser.add_argument('-test_size', type=int, help='test data size for each class', default=0)
+    parser.add_argument('-iterations', type=int, help='number of training iterations (default: 1000)', default=1000)
+    parser.add_argument('-dropout_rate', type=float, help='droupout rate (default: 0.5)', default=0.5)
     args = parser.parse_args()
 
     model_name = args.model_output
@@ -95,6 +96,7 @@ if __name__=="__main__":
     training_batch_size = args.training_batch_size
     iterations = args.iterations
     test_size = args.test_size
+    dropout_rate = args.dropout_rate
 
     ###load sentence with w2v word embeddings
     pos_sen, pos_fmatrix, pos_label = cPickle.load(open(args.pos_file, 'r'))
@@ -109,54 +111,73 @@ if __name__=="__main__":
     pad_sentence(sentences, w2v_size, max_length)
 
     ###remember to do cross valadition next time... don't say lazy
-    sentences_train, sentences_test = sentences[:-test_size], sentences[-test_size:]
-    labels_train, labels_test = labels[:-test_size], labels[-test_size:]
-    raw_sen_train, raw_sen_test = raw_sentences[:-test_size], raw_sentences[-test_size:]
+    sentences_train, labels_train, raw_sen_train = [], [], []
+    sentences_test, labels_test, raw_sen_test = [], [], []
+    if test_size == 0:
+        sentences_train, labels_train, raw_sen_train = sentences, labels, raw_sentences
+    else:
+        sentences_train, sentences_test = sentences[:-test_size], sentences[-test_size:]
+        labels_train, labels_test = labels[:-test_size], labels[-test_size:]
+        raw_sen_train, raw_sen_test = raw_sentences[:-test_size], raw_sentences[-test_size:]
+
+    print 'Training data size: %d' % len(sentences_train)
+    print 'Test data size: %d' % len(sentences_test)
+
+
+    ##########################
+    ### Construct the grah ###
+    ##########################
 
     ###training data placeholder
-    x = tf.placeholder("float", shape=[None, max_length, w2v_size])
-    y_ = tf.placeholder("float", shape=[None, label_size])
+    with tf.name_scope('feature-vectors') as scope:
+        x = tf.placeholder("float", shape=[None, max_length, w2v_size])
+    with tf.name_scope('labels') as scope:
+        y_ = tf.placeholder("float", shape=[None, label_size])
 
     ###Convolution and Pooling
     feature_size1 = 100
-    filter_list = [4]
+    filter_list = [3, 4, 5]
 
     poolings = []
 
     for idx, filter_size in enumerate(filter_list):
-        x_image = tf.reshape(x, shape=[-1, max_length, w2v_size, 1])
-        W_conv1 = weight_variable([filter_size, w2v_size, 1, feature_size1])
-        b_conv1 = bias_variable([feature_size1])
-
-        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-        h_pool1 = max_pool_Nx1(h_conv1, max_length - filter_size + 1)
-        poolings.append(h_pool1)
+        with tf.name_scope('conv-window-size-%d' % filter_size) as scope: 
+            x_image = tf.reshape(x, shape=[-1, max_length, w2v_size, 1])
+            W_conv1 = weight_variable([filter_size, w2v_size, 1, feature_size1])
+            b_conv1 = bias_variable([feature_size1])
+        with tf.name_scope('pool-window-size-%d' % filter_size) as scope:
+            h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+            h_pool1 = max_pool_Nx1(h_conv1, max_length - filter_size + 1)
+            poolings.append(h_pool1)
 
     ###combine pooled features
-    filters_total_size = feature_size1 * len(filter_list)
-    h_pool = tf.concat(3, poolings)
-    h_pool_all = tf.reshape(h_pool, [-1, filters_total_size])
+    with tf.name_scope('concat-max-pools') as scope:
+        filters_total_size = feature_size1 * len(filter_list)
+        h_pool = tf.concat(3, poolings)
+        h_pool_all = tf.reshape(h_pool, [-1, filters_total_size])
 
     ###dropout
-    keep_prob = tf.placeholder("float")
-    h_pool1_drop = tf.nn.dropout(h_pool_all, keep_prob)
+    with tf.name_scope('dropout') as scope:
+        keep_prob = tf.placeholder("float")
+        h_pool1_drop = tf.nn.dropout(h_pool_all, keep_prob)
 
     ###readout Layer
-    W_fc2 = weight_variable([filters_total_size, label_size])
-    b_fc2 = bias_variable([label_size])
-
-    h_pool1_flat = tf.reshape(h_pool1_drop, [-1, 1 * 1 * filters_total_size])
-    y_conv = tf.nn.softmax(tf.matmul(h_pool1_flat, W_fc2) + b_fc2)
+    with tf.name_scope('full-connected') as scope:
+        W_fc2 = weight_variable([filters_total_size, label_size])
+        b_fc2 = bias_variable([label_size])
+        h_pool1_flat = tf.reshape(h_pool1_drop, [-1, 1 * 1 * filters_total_size])
+        y_conv = tf.nn.softmax(tf.matmul(h_pool1_flat, W_fc2) + b_fc2)
 
     ###train
-    cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
-    with tf.name_scope("train") as scope:
+    with tf.name_scope('compute-loss') as scope:
+        cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
+    with tf.name_scope('train') as scope:
         train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-    with tf.name_scope("self-validate") as scope:
+    with tf.name_scope("training-accuracy") as scope:
         correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
         train_accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
         train_accuracy_summary = tf.scalar_summary("trainin accuracy", train_accuracy)
-    with tf.name_scope("test") as scope:
+    with tf.name_scope("test-accuracy") as scope:
         correct_prediction_test = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
         test_accuracy = tf.reduce_mean(tf.cast(correct_prediction_test, "float"))
         test_accuracy_summary = tf.scalar_summary("test accuracy", test_accuracy)
@@ -164,35 +185,34 @@ if __name__=="__main__":
     sess = tf.InteractiveSession()
     sess.run(tf.initialize_all_variables())
 
-    # Merge all the summaries and write them out to /tmp/mnist_logs
+    ### Merge all the summaries and write them out to /tmp/mnist_logs
     merged = tf.merge_all_summaries()
-    writer = tf.train.SummaryWriter("./training_logs", sess.graph_def)
+    writer = tf.train.SummaryWriter('./training_logs', sess.graph_def)
+
     ###
 
     for i in range(iterations):
         batch_x, batch_y = get_batch_rand(sentences_train, labels_train, training_batch_size)
-        if i % 10 == 0:
+        if i % 50 == 0:
             ## mini batch accuracy
-            #train_accuracy_score = train_accuracy.eval(feed_dict={x: batch_x, y_: batch_y, keep_prob: 1.0})
-            #print "step %d, training accuracy %g" % (i, train_accuracy_score)
             result = sess.run([train_accuracy_summary, train_accuracy], feed_dict={x: batch_x, y_: batch_y, keep_prob: 1.0})
             writer.add_summary(result[0], i)
-            print "step %d, training accuracy %g" % (i, result[1])
+            print 'step %d, training accuracy %g' % (i, result[1])
 
             ## test accuracy
-            #test_accuracy_score = test_accuracy.eval(feed_dict={x: sentences_test, y_: labels_test, keep_prob: 1.0})
-            #print "step %d, test accuracy %g" % (i, test_accuracy_score)
-            result = sess.run([test_accuracy_summary, test_accuracy], feed_dict={x: sentences_test, y_: labels_test, keep_prob: 1.0})
-            writer.add_summary(result[0], i)
-            print "step %d, test accuracy %g" % (i, result[1])
+            if len(sentences_test) > 0:
+                result = sess.run([test_accuracy_summary, test_accuracy], feed_dict={x: sentences_test, y_: labels_test, keep_prob: 1.0})
+                writer.add_summary(result[0], i)
+                print 'step %d, test accuracy %g' % (i, result[1])
 
-        sess.run(train_step, feed_dict={x: batch_x, y_: batch_y, keep_prob: 0.5})
+        sess.run(train_step, feed_dict={x: batch_x, y_: batch_y, keep_prob: dropout_rate})
 
-    tf_saver = tf.train.Saver()
-    tf_saver.save(sess, model_name)
+    with tf.name_scope('model-output') as scope:
+        tf_saver = tf.train.Saver()
+        tf_saver.save(sess, model_name)
 
-    test_accuracy_score = test_accuracy.eval(feed_dict={x: sentences_test, y_: labels_test, keep_prob: 1.0})
-    print "test accuracy %g" % test_accuracy_score
-
-    pred, ans = cnn_utils.evaluate_pr(tf, x, y_, sentences_test, labels_test, y_conv, keep_prob)
+    if len(sentences_test) > 0:
+        test_accuracy_score = test_accuracy.eval(feed_dict={x: sentences_test, y_: labels_test, keep_prob: 1.0})
+        print 'test accuracy %g' % test_accuracy_score
+        pred, ans = util.cnn_utils.evaluate_pr(tf, x, y_, sentences_test, labels_test, y_conv, keep_prob)
 
