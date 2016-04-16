@@ -6,8 +6,9 @@ reproduced the experiment in "Convolutional Neural Networks for Sentence Classif
 http://emnlp2014.org/papers/pdf/EMNLP2014181.pdf
 
 ### Prerequest
-TensorFlow https://www.tensorflow.org/
-word2vec https://code.google.com/archive/p/word2vec/
+TensorFlow - https://www.tensorflow.org/
+
+word2vec - https://code.google.com/archive/p/word2vec/
 
 ### Data
 You can find "sentence polarity dataset v1.0" from below link
