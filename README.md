@@ -5,13 +5,17 @@ It is a sentence classifier using Convolutional Neural Networks written in Tenso
 reproduced the experiment in "Convolutional Neural Networks for Sentence Classification" by Yoon Kim.
 http://emnlp2014.org/papers/pdf/EMNLP2014181.pdf
 
+### Prerequest
+TensorFlow https://www.tensorflow.org/
+word2vec https://code.google.com/archive/p/word2vec/
+
 ### Data
 You can find "sentence polarity dataset v1.0" from below link
 http://www.cs.cornell.edu/people/pabo/movie-review-data/
 Positive and Negative snippets were put in two different files.
 Or you can search for some other data sets mentioned in Yoon's paper.
 
-### Data Flow
+### Experiment flow
 #### Generate feature vector for each sentence
 If you want to use a pre-trained word embedding, check the GoogleNews-vectors-negative300.bin.gz from
 Google word2vec project https://code.google.com/archive/p/word2vec/ 
@@ -35,7 +39,11 @@ You have to generate positive and negative examples separately.
 
 #### Train sentence CNN classifier
 Use **sentence_cnn_train.py** to train the classifier. Give the paths of positive and 
-negative files from previous step as well as the output model name, others are optional.
+negative sentence vector files from previous step as well as the output model name, others are optional.
+You can use "-test_size" to set how many examples you want to use as validation data. They will not be used 
+when training and used for evaluating the errors during training.
+Also, you can use Tensorboard to draw the curve of training and test accuracy (default: 0). Tensorboard 
+should read logs from "training_logs" folder.
 
     usage: sentence_cnn_train.py [-h] -pf POS_FILE -nf NEG_FILE
                                  [-w2v_size W2V_SIZE] [--label_size LABEL_SIZE]
@@ -59,7 +67,7 @@ negative files from previous step as well as the output model name, others are o
                             size of each batch when training (default: 50)
       -m MODEL_OUTPUT, --model_output MODEL_OUTPUT
                             the trained model
-      -test_size TEST_SIZE  test data size
+      -test_size TEST_SIZE  test data size for each class (default: 0)
       -iterations ITERATIONS
                             number of training iterations (default: 1000)
       -dropout_rate DROPOUT_RATE
