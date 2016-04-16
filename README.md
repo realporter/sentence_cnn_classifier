@@ -1,19 +1,23 @@
 # sentence_cnn_classifier
-A sentence classifier using Convolutional Neural Networks in TensorFlow
 
 ### Description
+It is a sentence classifier using Convolutional Neural Networks written in TensorFlow which 
+reproduced the experiment in "Convolutional Neural Networks for Sentence Classification" by Yoon Kim.
+http://emnlp2014.org/papers/pdf/EMNLP2014181.pdf
 
 ### Data
+You can find "sentence polarity dataset v1.0" from below link
 http://www.cs.cornell.edu/people/pabo/movie-review-data/
-
+Positive and Negative snippets were put in two different files.
+Or you can search for some other data sets mentioned in Yoon's paper.
 
 ### Data Flow
 #### Generate feature vector for each sentence
 If you want to use a pre-trained word embedding, check the GoogleNews-vectors-negative300.bin.gz from
 Google word2vec project https://code.google.com/archive/p/word2vec/ 
 
-
-Use **generate_sentence_vectors.py** to convert raw sentences into feature vector.
+Then use **generate_sentence_vectors.py** to convert raw sentences into feature vectors using Google's w2v vectors.
+You have to generate positive and negative examples separately.
 
     usage: generate_sentence_vectors.py [-h] -w2v W2V [-w2v_size W2V_SIZE] -s
                                     SENTENCES -l {0,1} -v SENTENCE_VECTORS
@@ -30,7 +34,8 @@ Use **generate_sentence_vectors.py** to convert raw sentences into feature vecto
                             output sentence vectors
 
 #### Train sentence CNN classifier
-
+Use **sentence_cnn_train.py** to train the classifier. Give the paths of positive and 
+negative files from previous step as well as the output model name, others are optional.
 
     usage: sentence_cnn_train.py [-h] -pf POS_FILE -nf NEG_FILE
                                  [-w2v_size W2V_SIZE] [--label_size LABEL_SIZE]
@@ -54,7 +59,7 @@ Use **generate_sentence_vectors.py** to convert raw sentences into feature vecto
                             size of each batch when training (default: 50)
       -m MODEL_OUTPUT, --model_output MODEL_OUTPUT
                             the trained model
-      -test_size TEST_SIZE  test data size for each class
+      -test_size TEST_SIZE  test data size
       -iterations ITERATIONS
                             number of training iterations (default: 1000)
       -dropout_rate DROPOUT_RATE
@@ -65,5 +70,28 @@ Use **generate_sentence_vectors.py** to convert raw sentences into feature vecto
 
 
 #### Test the classifier
+Use **sentence_cnn_test.py** to evaluate your test set. Similar input parameters with the training one 
+but remember to set the max sentence length of training data.
+
+    usage: sentence_cnn_test.py [-h] -pf POS_FILE -nf NEG_FILE
+                                [-w2v_size W2V_SIZE] [--label_size LABEL_SIZE] -m
+                                MODEL_INPUT -slt MAX_SEN_LEN_TRAIN
+
+    Generate feature vector for sentences
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -pf POS_FILE, --pos_file POS_FILE
+                            positive feature vectors for training
+      -nf NEG_FILE, --neg_file NEG_FILE
+                            negitive feature vectors for training
+      -w2v_size W2V_SIZE    word2vector size (default: 300)
+      --label_size LABEL_SIZE
+                            how many classes? (default: 2)
+      -m MODEL_INPUT, --model_input MODEL_INPUT
+                            the trained model to read
+      -slt MAX_SEN_LEN_TRAIN, --max_sen_len_train MAX_SEN_LEN_TRAIN
+                            the max sentence length of training data
+
 
 
