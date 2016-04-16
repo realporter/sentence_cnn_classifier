@@ -110,8 +110,8 @@ if __name__=="__main__":
 
     pred, ans = cu.evaluate_pr(tf, x, y_, sentences_test, labels_test, y_conv, keep_prob)
 
-    print pred
-    print ans
+    #print pred
+    #print ans
 
     #for i in range(len(pred)):
     #    print pred[i], ans[i], labels_test[i], raw_sen_test[i]
